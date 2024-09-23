@@ -9,10 +9,10 @@ import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 contract TokenContract is ERC1155, Ownable, Initializable {
     using Strings for uint256;
 
-    // Mapping from token ID to metadata URI
+    // maps token ID to metadata URI
     mapping(uint256 => string) private tokenURIs;
 
-    // Mapping from token ID to royalty information
+    // maps token ID to royalty information
     mapping(uint256 => RoyaltyInfo) private royalties;
 
     struct RoyaltyInfo {

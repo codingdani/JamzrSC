@@ -19,6 +19,7 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
     uint256 private nextListingId;
 
     uint256[] public activeListings;
+    //maps listingId to index
     mapping(uint256 => uint256) public listingIndex;
     mapping(address => uint256[]) public sellerListings;
     mapping(address => mapping(uint256 => uint256[])) public assignTokenToListings;

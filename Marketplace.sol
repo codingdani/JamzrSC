@@ -125,6 +125,55 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
         }
     }
 
+    function buyNFT_multipleRoyalties(uint256 _listingId, uint256 _quantity) external payable nonReentrant {
+        Listing storage listing = listings[_listingId];
+        require(listing.isActive, "Listing not active");
+        require(_quantity <= listing.quantity, "Insufficient quantity available");
+        uint256 totalPrice = listing.price * _quantity;
+        require(msg.value >= totalPrice, "Insufficient payment");
+        uint256 fee = (totalPrice * marketplaceFeePercentage) / 10000;
+    // Get royalty information
+        (address[] memory royaltyReceivers, uint256[] memory royaltyAmounts) = 
+        TokenContract(listing.tokenContract).royaltyInfo(listing.tokenId, totalPrice);
+        uint256 totalRoyalties = 0;
+        for (uint256 i = 0; i < royaltyAmounts.length; i++) {
+            totalRoyalties += royaltyAmounts[i];
+        }
+        uint256 sellerPayment = totalPrice - fee - totalRoyalties;
+    // Update state
+        listing.quantity -= _quantity;
+        if (listing.quantity == 0) {
+            listing.isActive = false;
+            _removeFromActiveListings(_listingId);
+        }
+    // Record transaction
+        listingTransactions[_listingId].push(Transaction(
+            _listingId, 
+            msg.sender, 
+            listing.price, 
+            _quantity, 
+            block.timestamp
+        ));
+    // Perform transfers
+        bool success;
+        for (uint256 i = 0; i < royaltyReceivers.length; i++) {
+            if (royaltyAmounts[i] > 0) {
+                success = payable(royaltyReceivers[i]).send(royaltyAmounts[i]);
+                require(success, "Transfer of royalties failed");
+            }
+        }
+        success = payable(listing.seller).send(sellerPayment);
+        require(success, "Transfer to seller failed");
+        success = payable(owner).send(fee);
+        require(success, "Transfer of fee failed");
+        IERC1155(listing.tokenContract).safeTransferFrom(address(this), msg.sender, listing.tokenId, _quantity, "");
+        emit NFTPurchased(_listingId, msg.sender, _quantity);
+    // Refund excess payment
+        if (msg.value > totalPrice) {
+            payable(msg.sender).transfer(msg.value - totalPrice);
+        }
+}
+
     function setMarketplaceFee(uint256 _newFeePercentage) external onlyOwner {
         require(_newFeePercentage <= 10000, "Fee percentage cannot exceed 100%");
     //fee shown is 100.00% a 5 percent fee would be 500//

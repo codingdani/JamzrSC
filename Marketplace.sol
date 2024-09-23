@@ -15,13 +15,16 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
         uint256 quantity;
         bool isActive;
     }
+    //maps listindId to Listing
     mapping(uint256 => Listing) public listings;
     uint256 private nextListingId;
 
     uint256[] public activeListings;
     //maps listingId to index
     mapping(uint256 => uint256) public listingIndex;
+    //maps sellerAddress to Array if listingId
     mapping(address => uint256[]) public sellerListings;
+    //maps tokenContractAddress to TokenId to Array of listingId
     mapping(address => mapping(uint256 => uint256[])) public assignTokenToListings;
 
     struct Transaction {
@@ -31,6 +34,7 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
         uint256 quantity;
         uint256 timestamp;
     }
+    //maps listingId to Array of Transactions
     mapping(uint256 => Transaction[]) public listingTransactions;
 
     mapping(address => bool) public supportedTokenContracts;

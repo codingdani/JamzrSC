@@ -12,6 +12,7 @@ contract TokenContract is ERC1155, Ownable, Initializable {
     string public name;
 
     uint256[] private allTokenIds;
+    uint256 private nextTokenId;
 
     struct TokenDetails {
     uint256 totalSupply;
@@ -35,46 +36,51 @@ contract TokenContract is ERC1155, Ownable, Initializable {
     }
 
     function mint(
-        address _receiver, 
-        uint256 _id, 
-        uint256 _amount, 
-        string memory _newuri, 
+        address _receiver,
+        uint256 _amount,
+        string memory _newuri,
         bytes memory _data
-        ) public onlyOwner {
-        if (tokenDetails[_id].totalSupply == 0) {
-                allTokenIds.push(_id);
-            }
-        tokenDetails[_id].totalSupply += _amount;
-        tokenDetails[_id].uri = _newuri;
-        _mint(_receiver, _id, _amount, _data);
-        setTokenURI(_id, _newuri);
-    }
+    ) public onlyOwner {
+        uint256 tokenId = nextTokenId++;
+        tokenDetails[tokenId] = TokenDetails({
+            totalSupply: _amount,
+            uri: _newuri
+        });
+        allTokenIds.push(tokenId);
+        _mint(_receiver, tokenId, _amount, _data);
+        setTokenURI(tokenId, _newuri);
+        emit TokenMinted(tokenId, _receiver, _amount, _newuri);
+}
 
     function mintBatch(
         address _receiver,
-        uint256[] memory _ids,
         uint256[] memory _amounts,
         string[] memory _uris,
         bytes memory _data
     ) public onlyOwner {
-        require(_ids.length == _amounts.length && _ids.length == _uris.length, "Arrays length mismatch");
-        for (uint256 i = 0; i < _ids.length; i++) {
-            uint256 id = _ids[i];
-            uint256 amount = _amounts[i];
-            string memory uri = _uris[i];
-            if (_tokenDetails[id].totalSupply == 0) {
-                _allTokenIds.push(id);
-            }
-            _tokenDetails[id].totalSupply += amount;
-              _tokenDetails[id].uri = uri;
-            setTokenURI(id, uri);
+        require(_amounts.length == _uris.length, "Arrays length mismatch");
+        uint256[] memory newIds = new uint256[](_amounts.length);
+        for (uint256 i = 0; i < _amounts.length; i++) {
+            uint256 newId = nextTokenId++;
+            newIds[i] = newId;
+            tokenDetails[newId] = TokenDetails({
+                totalSupply: _amounts[i],
+                uri: _uris[i]
+            });
+            allTokenIds.push(newId);
+            setTokenURI(newId, _uris[i]);
+            emit TokenMinted(newId, _receiver, _amounts[i], _uris[i]);
         }
-        _mintBatch(_receiver, _ids, _amounts, _data);
-    }
+        _mintBatch(_receiver, newIds, _amounts, _data);
+    }   
 
     function getAllTokenIds() public view returns (uint256[] memory) {
     return allTokenIds; 
-    }   
+    }
+
+    function getTotalUniqueTokens() public view returns (uint256) {
+    return nextTokenId > 0 ? nextTokenId - 1 : 0;
+}   
 
     function getTokenDetails(uint256 _tokenId) public view returns (
         uint256 totalSupply, 

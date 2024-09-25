@@ -23,7 +23,6 @@ contract CustomERC1155Factory is Ownable {
         string memory _baseUri,
         string memory _name,
         address _receiver,
-        uint256 _id,
         uint256 _amount,
         string memory _tokenURI,
         bytes memory _data
@@ -31,7 +30,7 @@ contract CustomERC1155Factory is Ownable {
         TokenContract newContract = new TokenContract(_baseUri, _name);
         newContract.transferOwnership(msg.sender);
         // Mint tokens
-        newContract.mint(_receiver, _id, _amount, _tokenURI, _data);
+        newContract.mint(_receiver, _amount, _tokenURI, _data);
         // Add contract to tracking arrays and mappings
         createdContracts.push(address(newContract));
         creatorToContracts[msg.sender].push(address(newContract));

@@ -4,10 +4,11 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
-import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
-contract TokenContract is ERC1155, Ownable, Initializable {
+contract TokenContract is ERC1155, Ownable {
     using Strings for uint256;
+
+    event TokenMinted(uint256 indexed tokenId, address indexed receiver, uint256 amount, uint256 newuri);
 
     string public name;
 
@@ -31,7 +32,7 @@ contract TokenContract is ERC1155, Ownable, Initializable {
         uint256 percentage;
     }
 
-    constructor(string memory _baseUri, string memory _name) ERC1155(_baseUri) {
+    constructor(string memory _name, string memory _baseUri) ERC1155(_baseUri) {
         name = _name;
     }
 
@@ -50,6 +51,7 @@ contract TokenContract is ERC1155, Ownable, Initializable {
         _mint(_receiver, tokenId, _amount, _data);
         setTokenURI(tokenId, _newuri);
         emit TokenMinted(tokenId, _receiver, _amount, _newuri);
+        return tokenId;
 }
 
     function mintBatch(
@@ -80,7 +82,7 @@ contract TokenContract is ERC1155, Ownable, Initializable {
 
     function getTotalUniqueTokens() public view returns (uint256) {
     return nextTokenId > 0 ? nextTokenId - 1 : 0;
-}   
+    }   
 
     function getTokenDetails(uint256 _tokenId) public view returns (
         uint256 totalSupply, 

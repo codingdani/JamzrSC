@@ -8,7 +8,7 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 contract TokenContract is ERC1155, Ownable {
     using Strings for uint256;
 
-    event TokenMinted(uint256 indexed tokenId, address indexed receiver, uint256 amount, uint256 newuri);
+    event TokenMinted(uint256 indexed tokenId, address indexed receiver, uint256 amount, uint256 tokenURI);
 
     string public name;
 

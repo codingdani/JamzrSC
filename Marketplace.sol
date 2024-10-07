@@ -28,6 +28,7 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
     mapping(uint256 => Listing) public listings;
     uint256 private listingCounter;
 
+    //Für active Listing Verwaltung vielleicht Enumerable Set von Openzeppelin integrieren, kein Array
     uint256[] public activeListings;
     //maps listingId to index in activeListings
     mapping(uint256 => uint256) public listingIndex;
@@ -82,7 +83,7 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
 
 
 //All Listing Operations: create, getDetails, delete, removeFromMappings, deactivate, cleanupState
-// Für Listing Verwaltung vielleicht Enumerable Set von Openzeppelin integrieren oder ein Mutex verwenden (nonReentrant)
+// Mutex verwenden (nonReentrant) und vielleicht Eventbasierte State Änderung implementieren, damit
 
     function createListing(address _tokenContract, uint256 _tokenId, uint256 _price, uint256 _quantity) public nonReentrant {
         require(supportedTokenContracts[_tokenContract], "Token contract not supported");    
@@ -115,6 +116,7 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
         _removeFromActiveListings(_listingId);
         _removeFromSellerListings(listing.seller, _listingId);
         _removeFromAssignTokenToListings(listing.tokenContract, listing.tokenId, _listingId);
+        delete listingNeedsCleanup[_listingId];
         delete listings[_listingId];
         emit ListingDeleted(_listingId);
     }
@@ -163,7 +165,7 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
         emit ListingDeactivated(_listingId);
     }
 
-    function cleanupListingState(uint256 _listingId) external {
+    function cleanupListing(uint256 _listingId) external {
     //only needs to exist when _deactivateListing is included into buyNFT Function
     //should be called by listing.seller or a reward could be included for all Users to collect after cleaning 
         require(listingNeedsCleanup[_listingId], "Listing doesn't need cleanup");
@@ -171,6 +173,8 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
         _removeFromSellerListings(listing.seller, _listingId);
         _removeFromAssignTokenToListings(listing.tokenContract, listing.tokenId, _listingId);
         delete listingNeedsCleanup[_listingId];
+        delete listings[_listingId];
+        emit ListingDeleted(_listingId);
     }
 
 
@@ -184,6 +188,12 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
         require(msg.value >= totalPrice, "Insufficient payment");
         uint256 fee = (totalPrice * marketplaceFeePercentage) / 10000;
         uint256 sellerPayment = totalPrice - fee;
+    //update quantity
+        listing.quantity -= _quantity;
+        if (listing.quantity == 0) {
+            _deactivateListing(_listingId);
+            emit ListingDeactivated(_listingId);
+        }
     // Perform transfers
         bool success = payable(listing.seller).send(sellerPayment);
         require(success, "Transfer to seller failed");
@@ -191,8 +201,6 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
         require(success, "Transfer of fee failed");
         IERC1155(listing.tokenContract)
         .safeTransferFrom(address(this), msg.sender, listing.tokenId, _quantity, "");
-    //update quantity
-        listing.quantity -= _quantity;
     // record transaction    
         listingTransactions[_listingId].push(Transaction(
             _listingId, 

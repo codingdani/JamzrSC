@@ -12,6 +12,10 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
 // Der Marketplace ist jetzt nur Operator. Die Token werden im Wallet der Besitzer gelassen 
 // Cleanup von inActive Listings sollte vom Ersteller übernommen werden => welche Funktionen braucht man wirklich? Sollten alle beibehalten werden?
 
+//mögliche Probleme: Gleichzeitige Zustandsänderungen
+// vielleicht auf eine Eventbasierte Architektur umsteigen, um Zustandsänderungen zu signalisieren
+// vielleicht Versionsnummern Für Listings hinzufügen, um Konflikte bei gleichzeitigen Änderungen zu erkennen
+
     struct Listing {
         address tokenContract;
         address seller;
@@ -22,7 +26,7 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
     }
     //maps listindId to Listing
     mapping(uint256 => Listing) public listings;
-    uint256 private nextListingId;
+    uint256 private listingCounter;
 
     uint256[] public activeListings;
     //maps listingId to index in activeListings
@@ -58,7 +62,7 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
         );
     event ListingDeactivated(uint256 indexed listingId);
     event ListingDeleted(uint256 indexed listingId);
-
+    event ListingUpdated(uint256 indexed listingId, uint256 remainingQuantity);
     event NFTPurchased(uint256 indexed listingId, address indexed buyer, uint256 quantity);
     event TokenSold(
         uint256 indexed listingId, 
@@ -78,13 +82,14 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
 
 
 //All Listing Operations: create, getDetails, delete, removeFromMappings, deactivate, cleanupState
+// Für Listing Verwaltung vielleicht Enumerable Set von Openzeppelin integrieren oder ein Mutex verwenden (nonReentrant)
 
-    function createListing(address _tokenContract, uint256 _tokenId, uint256 _price, uint256 _quantity) public {
+    function createListing(address _tokenContract, uint256 _tokenId, uint256 _price, uint256 _quantity) public nonReentrant {
         require(supportedTokenContracts[_tokenContract], "Token contract not supported");    
         require(IERC1155(_tokenContract).balanceOf(msg.sender, _tokenId) >= _quantity, "Insufficient token balance");
     //marketplace has to be set as Operator in Token-Smart-Contract via setApprovalForAll()-Function 
         require(IERC1155(_tokenContract).isApprovedForAll(msg.sender, address(this)), "Contract not approved as operator");
-        uint256 listingId = nextListingId++;
+        uint256 listingId = _getNextListingId();
         listings[listingId] = Listing(_tokenContract, msg.sender, _tokenId, _price, _quantity, true);
         sellerListings[msg.sender].push(listingId);
         activeListings.push(listingId);
@@ -170,7 +175,7 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
 
 
 //Purchase NFT Function
-// no state updating so the last buyer does not get punished with high gas fees
+// no state updating (mappings and arrays) so the last buyer of the Token does not get punished with high gas fees when the Listing should be deactivated
     function buyNFT(uint256 _listingId, uint256 _quantity) external payable nonReentrant {
         Listing storage listing = listings[_listingId];
         require(listing.isActive, "Listing not active");
@@ -186,6 +191,8 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
         require(success, "Transfer of fee failed");
         IERC1155(listing.tokenContract)
         .safeTransferFrom(address(this), msg.sender, listing.tokenId, _quantity, "");
+    //update quantity
+        listing.quantity -= _quantity;
     // record transaction    
         listingTransactions[_listingId].push(Transaction(
             _listingId, 
@@ -196,7 +203,14 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
             block.timestamp
         ));
         emit NFTPurchased(_listingId, msg.sender, _quantity);
+        emit ListingUpdated(_listingId, listing.quantity);
     }
+
+//Listing Utils
+    function _getNextListingId() private returns (uint256) {
+    listingCounter++;
+    return listingCounter;
+}
 
 
 //Marketplace Functions

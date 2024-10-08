@@ -5,8 +5,10 @@ import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
+    using EnumerableSet for EnumerableSet.UintSet;
 //ZU BEACHTEN: 
 // Alle Käufer sollen gleiche Gas Fees zahlen (der letzte Käufer soll nicht alle state changes zahlen müssen)
 // Der Marketplace ist jetzt nur Operator. Die Token werden im Wallet der Besitzer gelassen 
@@ -17,6 +19,7 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
 // vielleicht Versionsnummern Für Listings hinzufügen, um Konflikte bei gleichzeitigen Änderungen zu erkennen
 
     struct Listing {
+        uint256 listingId;
         address tokenContract;
         address seller;
         uint256 tokenId;
@@ -29,9 +32,7 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
     uint256 private listingCounter;
 
     //Für active Listing Verwaltung vielleicht Enumerable Set von Openzeppelin integrieren, kein Array
-    uint256[] public activeListings;
-    //maps listingId to index in activeListings
-    mapping(uint256 => uint256) public listingIndex;
+    EnumerableSet.UintSet private activeListings;
     //maps sellerAddress to Array of listingId
     mapping(address => uint256[]) public sellerListings;
     //maps tokenContractAddress to TokenId to Array of listingId
@@ -83,24 +84,41 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
 
 
 //All Listing Operations: create, getDetails, delete, removeFromMappings, deactivate, cleanupState
-// Mutex verwenden (nonReentrant) und vielleicht Eventbasierte State Änderung implementieren, damit
 
-    function createListing(address _tokenContract, uint256 _tokenId, uint256 _price, uint256 _quantity) public nonReentrant {
+    function createListing(address _tokenContract, uint256 _tokenId, uint256 _price, uint256 _quantity) public {
         require(supportedTokenContracts[_tokenContract], "Token contract not supported");    
         require(IERC1155(_tokenContract).balanceOf(msg.sender, _tokenId) >= _quantity, "Insufficient token balance");
     //marketplace has to be set as Operator in Token-Smart-Contract via setApprovalForAll()-Function 
         require(IERC1155(_tokenContract).isApprovedForAll(msg.sender, address(this)), "Contract not approved as operator");
         uint256 listingId = _getNextListingId();
-        listings[listingId] = Listing(_tokenContract, msg.sender, _tokenId, _price, _quantity, true);
+    //Creationg of Listing changed to memory for gas-efficiency
+        Listing memory newListing = Listing(listingId, _tokenContract, msg.sender, _tokenId, _price, _quantity, true);
+        listings[listingId] = newListing;
         sellerListings[msg.sender].push(listingId);
-        activeListings.push(listingId);
+        activeListings.add(listingId);
         assignTokenToListings[_tokenContract][_tokenId].push(listingId);
-        listingIndex[listingId] = activeListings.length - 1;
-        emit ListingCreated(listingId, _tokenContract, msg.sender, _tokenId, _amount, _price);
+        emit ListingCreated(listingId, _tokenContract, msg.sender, _tokenId, _price, _quantity);
         return listingId;
     }
 
-    function getListingDetails(uint256 _listingId) external view returns (
+    function getActiveListings(uint256 _startIndex, uint256 _count) public view returns (Listing[] memory, bool) {
+    //This Function can "lazy load" a specific number of Active Listings, which can be called from the Frontend
+        uint256 totalActive = activeListings.length();
+        uint256 endIndex = _startIndex + _count;
+        if (endIndex > totalActive) {
+            endIndex = totalActive;
+        }
+        uint256 resultCount = endIndex - _startIndex;
+        Listing[] memory result = new Listing[](resultCount);
+        for (uint256 i = 0; i < resultCount; i++) {
+            uint256 listingId = activeListings.at(_startIndex + i);
+            result[i] = listings[listingId];
+        }
+    //gibt das Array von Listing struct zurück und einen boolean, ob noch mehr Listings existieren
+        return (result, endIndex < totalActive);
+    }
+
+    function getListingDetailsFromId(uint256 _listingId) external view returns (
         address seller, 
         address tokenContract,
         uint256 tokenId, 
@@ -113,24 +131,12 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
     function deleteListing(uint256 _listingId) external {
         Listing storage listing = listings[_listingId];
         require(listing.seller == msg.sender, "Not the seller");
-        _removeFromActiveListings(_listingId);
+        activeListings.remove(_listingId);
         _removeFromSellerListings(listing.seller, _listingId);
         _removeFromAssignTokenToListings(listing.tokenContract, listing.tokenId, _listingId);
         delete listingNeedsCleanup[_listingId];
         delete listings[_listingId];
         emit ListingDeleted(_listingId);
-    }
-
-    function _removeFromActiveListings(uint256 _listingId) internal {
-    //puts specific Listing at the end of activeListings Array and trims it off the end//
-    //swap of indexes because of time efficiency O(1)//
-        uint256 index = listingIndex[_listingId];
-        uint256 lastIndex = activeListings.length - 1;
-        uint256 lastListingId = activeListings[lastIndex];
-        activeListings[index] = lastListingId;
-        listingIndex[lastListingId] = index;
-        activeListings.pop();
-        delete listingIndex[_listingId];
     }
 
     function _removeFromSellerListings(address _seller, uint256 _listingId) internal {
@@ -155,12 +161,11 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
         }
     }
 
-    function _deactivateListing(uint256 _listingId) internal {
+    function _deactivateListing(Listing storage _listing, uint256 _listingId) internal {
     //should this function be included into buyNFT()-Function? Will increase gas fees for last buyer
-        require(listing.isActive, "Listing already deactivated");
-        Listing storage listing = listings[_listingId];
-        listing.isActive = false;
-        _removeFromActiveListings(_listingId);
+        require(_listing.isActive, "Listing already deactivated");
+        _listing.isActive = false;
+        activeListings.remove(_listingId);
         listingNeedsCleanup[_listingId] = true;
         emit ListingDeactivated(_listingId);
     }
@@ -191,7 +196,7 @@ contract NFTMarketplace is ERC1155Holder, ReentrancyGuard, Ownable {
     //update quantity
         listing.quantity -= _quantity;
         if (listing.quantity == 0) {
-            _deactivateListing(_listingId);
+            _deactivateListing(listing, _listingId);
             emit ListingDeactivated(_listingId);
         }
     // Perform transfers

@@ -21,7 +21,7 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
         uint256 price;
         uint256 quantity;
         bool isActive;
-        uint256 createdAt;
+        uint256 timestamp;
     }
     //maps listindId to Listing
     mapping(uint256 => Listing) public listings;
@@ -107,7 +107,7 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
             newListing.tokenId, 
             newListing.price, 
             newListing.quantity, 
-            newListing.createdAt
+            newListing.timestamp
             );
         return listingId;
     }
@@ -271,5 +271,4 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
         supportedTokenContracts[_tokenContract] = false;
     }
 }
-
 

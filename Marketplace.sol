@@ -10,7 +10,7 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
     using EnumerableSet for EnumerableSet.UintSet;
 //ZU BEACHTEN: 
 // Alle Käufer sollen gleiche Gas Fees zahlen (der letzte Käufer soll nicht alle state changes zahlen müssen)
-// Der Marketplace ist jetzt nur Operator. Die Token werden im Wallet der Besitzer gelassen 
+// Der Marketplace ist nur Operator. Die Token werden im Wallet der Besitzer gelassen 
 // Cleanup von inActive Listings sollte vom Ersteller übernommen werden 
 
     struct Listing {
@@ -32,19 +32,20 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
     mapping(address => EnumerableSet.UintSet) public sellerListings;
     //maps tokenContractAddress to TokenId to Set of listingId
     mapping(address => mapping(uint256 => EnumerableSet.UintSet)) public assignTokenToListings;
-    //maps listingId to bool to indicate that Listing needs to be removed from all mappings
+    //maps listingId to bool to indicate that Listing needs to be removed from all mappings and Sets
     mapping(uint256 => bool) public listingNeedsCleanup;
 
-    struct Transaction {
-        uint256 listingId;
-        address buyer;
-        uint256 price;
-        uint256 mfee;
-        uint256 quantity;
-        uint256 timestamp;
-    }
-    //maps listingId to Array of Transactions
-    mapping(uint256 => Transaction[]) public listingTransactions;
+    //Umstieg auf das Event "TokenSold", um Gaskosten zu reduzieren
+    // struct Transaction {
+    //     uint256 listingId;
+    //     address buyer;
+    //     uint256 price;
+    //     uint256 mfee;
+    //     uint256 quantity;
+    //     uint256 timestamp;
+    // }
+    // //maps listingId to Array of Transactions
+    // mapping(uint256 => Transaction[]) public listingTransactions;
 
     mapping(address => bool) public supportedTokenContracts;
     uint256 public marketplaceFeePercentage;
@@ -69,7 +70,9 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
         address buyer, 
         uint256 tokenId, 
         uint256 quantity, 
-        uint256 price
+        uint256 price,
+        uint256 mfee,
+        uint256 timestamp
         );
     event MarketplaceFeeUpdated(uint256 newFeePercentage);
 
@@ -78,23 +81,28 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
         owner = msg.sender;
     }
 
-//All Listing Operations: create, delete, removeFromMappings, deactivate, cleanup // Utils: getAllActiveListings, getListingsForToken, getSellerListings, getListingDetailsFromId
+//All Listing Operations: create, delete, removeFromMappings, deactivate, cleanup 
+// Listing-Utils: getAllActiveListings, getActiveListingsForContract, getListingsForToken, getSellerListings, getListingDetailsFromId
 
-    function createListing(address _tokenContract, uint256 _tokenId, uint256 _price, uint256 _quantity) public returns (uint256) {
-        require(supportedTokenContracts[_tokenContract], "Token contract not supported");    
-        require(IERC1155(_tokenContract).balanceOf(msg.sender, _tokenId) >= _quantity, "Insufficient token balance");
+    function createListing(address _tokenContract, uint256 _tokenId, uint256 _price, uint256 _quantity) 
+    public returns (uint256) {
+        require(supportedTokenContracts[_tokenContract], 
+        "Token contract not supported");
+        require(IERC1155(_tokenContract).balanceOf(msg.sender, _tokenId) >= _quantity, 
+        "Insufficient token balance");
     //marketplace has to be set as Operator in Token-Smart-Contract via setApprovalForAll()-Function 
-        require(IERC1155(_tokenContract).isApprovedForAll(msg.sender, address(this)), "Contract not approved as operator");
+        require(IERC1155(_tokenContract).isApprovedForAll(msg.sender, address(this)), 
+        "Contract not approved as operator");
         uint256 listingId = _getNextListingId();
         Listing memory newListing = Listing(
-            listingId, 
-            _tokenContract, 
-            msg.sender, 
-            _tokenId, 
-            _price, 
-            _quantity, 
-            true, 
-            block.timestamp
+            listingId: listingId,
+            tokenContract: _tokenContract,
+            seller: msg.sender,
+            tokenId: _tokenId,
+            price: _price,
+            quantity: _quantity,
+            isActive: true, 
+            timestamp: block.timestamp
             );
         listings[listingId] = newListing;
         sellerListings[msg.sender].add(listingId);
@@ -158,7 +166,8 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
         return listingCounter;
     }
 
-    function getAllActiveListings(uint256 _startIndex, uint256 _count) public view returns (Listing[] memory, bool) {
+    function getAllActiveListings(uint256 _startIndex, uint256 _count) 
+    public view returns (Listing[] memory, bool) {
     //This Function can "lazy load" a specific number of Active Listings, which can be called from the Frontend
         uint256 totalActive = activeListings.length();
         uint256 endIndex = _startIndex + _count;
@@ -204,7 +213,8 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
         return (result, totalProcessed < _startIndex + _count);
     }
 
-    function getListingsForToken(address _tokenContract, uint256 _tokenId) public view returns (uint256[] memory) {
+    function getListingsForToken(address _tokenContract, uint256 _tokenId) 
+    public view returns (uint256[] memory) {
         return assignTokenToListings[_tokenContract][_tokenId].values();
     }
 
@@ -212,7 +222,8 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
         return sellerListings[_seller].values();
     }
 
-    function getListingDetailsFromId(uint256 _listingId) external view returns (Listing memory) {
+    function getListingDetailsFromId(uint256 _listingId) 
+    external view returns (Listing memory) {
         require(_listingId < listingCounter, "Listing does not exist");
         return listings[_listingId];
     }
@@ -241,17 +252,19 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
         require(success, "Transfer of fee failed");
         IERC1155(listing.tokenContract)
         .safeTransferFrom(address(this), msg.sender, listing.tokenId, _quantity, "");
-    // record transaction    
-        listingTransactions[_listingId].push(Transaction(
-            _listingId, 
-            msg.sender, 
-            listing.price,
-            fee, 
-            _quantity, 
-            block.timestamp
-        ));
-        emit NFTPurchased(_listingId, msg.sender, _quantity);
-        emit ListingUpdated(_listingId, listing.quantity);
+    // record transaction & emit TokenSold event
+    emit TokenSold(
+        listingId: _listingId,
+        tokenContract: listing.tokenContract,
+        tokenId: listing.tokenId,
+        seller: listing.seller,
+        buyer: msg.sender,
+        quantity: _quantity,
+        price: totalPrice,
+        mfee: fee,
+        timestamp: block.timestamp
+    );
+    emit ListingUpdated(_listingId, listing.quantity);
     }
 
 

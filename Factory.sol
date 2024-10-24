@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 import "./TokenContract.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -10,8 +10,10 @@ contract CustomERC1155Factory is Ownable {
     address[] public createdContracts;
     mapping(address => address[]) public creatorToContracts;
 
-    function createTokenContract(string memory _baseUri, string memory _name) public returns (address) {
-        TokenContract newContract = new TokenContract(_baseUri, _name);
+    constructor(address initialOwner) Ownable(initialOwner) {}
+
+    function createTokenContract(string memory _baseURI, string memory _name) public returns (address) {
+        TokenContract newContract = new TokenContract(_name, _baseURI, msg.sender);
         newContract.transferOwnership(msg.sender);
         createdContracts.push(address(newContract));
         creatorToContracts[msg.sender].push(address(newContract));
@@ -20,23 +22,23 @@ contract CustomERC1155Factory is Ownable {
     }
 
     function createTokenContractAndMint(
-        string memory _baseUri,
         string memory _name,
+        string memory _baseURI,
         address _receiver,
         uint256 _amount,
         string memory _tokenURI,
         bytes memory _data
-    ) public returns (address) {
-        TokenContract newContract = new TokenContract(_baseUri, _name);
+    ) public returns (address, uint256) {
+        TokenContract newContract = new TokenContract(_name, _baseURI, msg.sender);
         newContract.transferOwnership(msg.sender);
         // Mint tokens
-        newContract.mint(_receiver, _amount, _tokenURI, _data);
+        uint256 tokenId = newContract.mint(_receiver, _amount, _tokenURI, _data);
         // Add contract to tracking arrays and mappings
         createdContracts.push(address(newContract));
         creatorToContracts[msg.sender].push(address(newContract));
         // Emit event
         emit TokenContractCreated(msg.sender, address(newContract), _name);
-        return address(newContract);
+        return (address(newContract), tokenId);
     }
 
     function getContractCount() public view returns (uint256) {
@@ -52,7 +54,7 @@ contract CustomERC1155Factory is Ownable {
         return creatorToContracts[_creator].length;
     }
 
-    function getAllContractsByCreator(address _creator) public view returns (uint256[]) {
+    function getAllContractsByCreator(address _creator) public view returns (address[] memory) {
         return creatorToContracts[_creator];
     }
 

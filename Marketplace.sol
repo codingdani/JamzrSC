@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -27,11 +27,11 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
     mapping(uint256 => Listing) public listings;
     uint256 private listingCounter;
 
-    EnumerableSet.UintSet public activeListings;
+    EnumerableSet.UintSet internal activeListings;
     //maps sellerAddress to Set of listingId
-    mapping(address => EnumerableSet.UintSet) public sellerListings;
+    mapping(address => EnumerableSet.UintSet) internal sellerListings;
     //maps tokenContractAddress to TokenId to Set of listingId
-    mapping(address => mapping(uint256 => EnumerableSet.UintSet)) public assignTokenToListings;
+    mapping(address => mapping(uint256 => EnumerableSet.UintSet)) internal assignTokenToListings;
     //maps listingId to bool to indicate that Listing needs to be removed from all mappings and Sets
     mapping(uint256 => bool) public listingNeedsCleanup;
 
@@ -76,9 +76,8 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
         );
     event MarketplaceFeeUpdated(uint256 newFeePercentage);
 
-    constructor(uint256 _initialFeePercentage) {
+    constructor(uint256 _initialFeePercentage) Ownable(msg.sender){
         marketplaceFeePercentage = _initialFeePercentage;
-        owner = msg.sender;
     }
 
 //All Listing Operations: create, delete, removeFromMappings, deactivate, cleanup 
@@ -100,20 +99,20 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
         "Contract not approved as operator");
         uint256 listingId = _getNextListingId();
         Listing memory newListing = Listing(
-            listingId: listingId,
-            tokenContract: _tokenContract,
-            seller: msg.sender,
-            tokenId: _tokenId,
-            price: _price,
-            quantity: _quantity,
-            isActive: true, 
-            timestamp: block.timestamp
+            listingId,
+            _tokenContract,
+            msg.sender,
+            _tokenId,
+            _price,
+            _quantity,
+            true, 
+            block.timestamp
             );
         listings[listingId] = newListing;
         sellerListings[msg.sender].add(listingId);
         activeListings.add(listingId);
         assignTokenToListings[_tokenContract][_tokenId]
-        .add(_listingId);
+        .add(listingId);
         emit ListingCreated(
             newListing.listingId, 
             newListing.tokenContract, 
@@ -258,21 +257,21 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
     // Perform transfers
         bool success = payable(listing.seller).send(sellerPayment);
         require(success, "Transfer to seller failed");
-        success = payable(owner).send(fee);
+        success = payable(owner()).send(fee);
         require(success, "Transfer of fee failed");
         IERC1155(listing.tokenContract)
         .safeTransferFrom(address(this), msg.sender, listing.tokenId, _quantity, "");
     // record transaction & emit TokenSold event
     emit TokenSold(
-        listingId: _listingId,
-        tokenContract: listing.tokenContract,
-        tokenId: listing.tokenId,
-        seller: listing.seller,
-        buyer: msg.sender,
-        quantity: _quantity,
-        price: totalPrice,
-        mfee: fee,
-        timestamp: block.timestamp
+        _listingId,
+        listing.tokenContract,
+        listing.seller,
+        msg.sender,
+        listing.tokenId,
+        _quantity,
+        totalPrice,
+        fee,
+        block.timestamp
     );
     emit ListingUpdated(_listingId, listing.quantity);
     }

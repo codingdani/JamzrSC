@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -8,17 +8,17 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 contract TokenContract is ERC1155, Ownable {
     using Strings for uint256;
 
-    event TokenMinted(uint256 indexed tokenId, address indexed receiver, uint256 amount, uint256 tokenURI);
+    event TokenMinted(uint256 indexed tokenId, address indexed receiver, uint256 amount, string tokenURI);
 
     string public name;
 
-    uint256[] private allTokenIds;
     uint256 private nextTokenId;
 
     struct TokenDetails {
     uint256 totalSupply;
     string uri;
     }
+    //maps token ID to TokenDetails
     mapping(uint256 => TokenDetails) private tokenDetails;
 
     // maps token ID to metadata URI
@@ -32,34 +32,33 @@ contract TokenContract is ERC1155, Ownable {
         uint256 percentage;
     }
 
-    constructor(string memory _name, string memory _baseUri) ERC1155(_baseUri) {
+    constructor(string memory _name, string memory _baseURI, address _owner) ERC1155(_baseURI) Ownable(_owner) {
         name = _name;
     }
 
     function mint(
         address _receiver,
         uint256 _amount,
-        string memory _newuri,
+        string memory _tokenURI,
         bytes memory _data
-    ) public onlyOwner {
+    ) external onlyOwner returns (uint256) {
         uint256 tokenId = nextTokenId++;
         tokenDetails[tokenId] = TokenDetails({
             totalSupply: _amount,
-            uri: _newuri
+            uri: _tokenURI
         });
-        allTokenIds.push(tokenId);
         _mint(_receiver, tokenId, _amount, _data);
-        setTokenURI(tokenId, _newuri);
-        emit TokenMinted(tokenId, _receiver, _amount, _newuri);
+        setTokenURI(tokenId, _tokenURI);
+        emit TokenMinted(tokenId, _receiver, _amount, _tokenURI);
         return tokenId;
-}
+    }
 
     function mintBatch(
         address _receiver,
         uint256[] memory _amounts,
         string[] memory _uris,
         bytes memory _data
-    ) public onlyOwner {
+    ) external onlyOwner {
         require(_amounts.length == _uris.length, "Arrays length mismatch");
         uint256[] memory newIds = new uint256[](_amounts.length);
         for (uint256 i = 0; i < _amounts.length; i++) {
@@ -69,22 +68,17 @@ contract TokenContract is ERC1155, Ownable {
                 totalSupply: _amounts[i],
                 uri: _uris[i]
             });
-            allTokenIds.push(newId);
             setTokenURI(newId, _uris[i]);
             emit TokenMinted(newId, _receiver, _amounts[i], _uris[i]);
         }
         _mintBatch(_receiver, newIds, _amounts, _data);
     }   
 
-    function getAllTokenIds() public view returns (uint256[] memory) {
-    return allTokenIds; 
-    }
-
-    function getTotalUniqueTokens() public view returns (uint256) {
+    function getTotalUniqueTokens() external view returns (uint256) {
     return nextTokenId > 0 ? nextTokenId - 1 : 0;
     }   
 
-    function getTokenDetails(uint256 _tokenId) public view returns (
+    function getTokenDetails(uint256 _tokenId) external view returns (
         uint256 totalSupply, 
         string memory tokenUri
         ) {
@@ -92,25 +86,25 @@ contract TokenContract is ERC1155, Ownable {
     return (details.totalSupply, details.uri);
     }
 
-    function getAllTokensWithDetails() public view returns (
-    uint256[] memory _ids,
-    uint256[] memory _supplies,
-    string[] memory _uris
-    ) {
-        uint256 length = _allTokenIds.length;
-        ids = new uint256[](length);
-        supplies = new uint256[](length);
-        uris = new string[](length);
+    // function getAllTokensWithDetails() external view returns (
+    // uint256[] memory _ids,
+    // uint256[] memory _supplies,
+    // string[] memory _uris
+    // ) {
+    //     uint256 length = _allTokenIds.length;
+    //     ids = new uint256[](length);
+    //     supplies = new uint256[](length);
+    //     uris = new string[](length);
 
-        for (uint256 i = 0; i < length; i++) {
-            uint256 id = _allTokenIds[i];
-            ids[i] = id;
-            supplies[i] = _tokenDetails[id].totalSupply;
-            uris[i] = _tokenDetails[id].uri;
-        }
+    //     for (uint256 i = 0; i < length; i++) {
+    //         uint256 id = _allTokenIds[i];
+    //         ids[i] = id;
+    //         supplies[i] = _tokenDetails[id].totalSupply;
+    //         uris[i] = _tokenDetails[id].uri;
+    //     }
 
-        return (ids, supplies, uris);
-    }
+    //     return (ids, supplies, uris);
+    // }
 
     function setTokenRoyalty(
         uint256 _tokenId, 
@@ -118,7 +112,7 @@ contract TokenContract is ERC1155, Ownable {
         uint256 _percentage
         ) public onlyOwner {
         require(_percentage <= 10000, "Royalty percentage cannot exceed 100%");
-        royalties[tokenId] = RoyaltyInfo(_recipient, _percentage);
+        royalties[_tokenId] = RoyaltyInfo(_recipient, _percentage);
     }
 
     function royaltyInfo(
@@ -132,8 +126,8 @@ contract TokenContract is ERC1155, Ownable {
         return (royalty.recipient, (_salePrice * royalty.percentage) / 10000);
     }
 
-    function setTokenURI(uint256 _tokenId, string memory _newuri) private {
-        tokenURIs[_tokenId] = _newuri;
+    function setTokenURI(uint256 _tokenId, string memory _newURI) private {
+        tokenURIs[_tokenId] = _newURI;
     }
 
     function uri(uint256 _tokenId) public view virtual override 

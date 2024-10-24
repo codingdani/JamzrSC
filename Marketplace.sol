@@ -84,13 +84,18 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
 //All Listing Operations: create, delete, removeFromMappings, deactivate, cleanup 
 // Listing-Utils: getAllActiveListings, getActiveListingsForContract, getListingsForToken, getSellerListings, getListingDetailsFromId
 
-    function createListing(address _tokenContract, uint256 _tokenId, uint256 _price, uint256 _quantity) 
-    public returns (uint256) {
+    function createListing(
+        address _tokenContract, 
+        uint256 _tokenId, 
+        uint256 _price, 
+        uint256 _quantity) 
+    external returns (uint256) {
         require(supportedTokenContracts[_tokenContract], 
         "Token contract not supported");
-        require(IERC1155(_tokenContract).balanceOf(msg.sender, _tokenId) >= _quantity, 
+        require(IERC1155(_tokenContract).balanceOf(
+            msg.sender, _tokenId) >= _quantity, 
         "Insufficient token balance");
-    //marketplace has to be set as Operator in Token-Smart-Contract via setApprovalForAll()-Function 
+    //marketplace has to be set as Operator in Token-Smart-Contract
         require(IERC1155(_tokenContract).isApprovedForAll(msg.sender, address(this)), 
         "Contract not approved as operator");
         uint256 listingId = _getNextListingId();
@@ -107,7 +112,8 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
         listings[listingId] = newListing;
         sellerListings[msg.sender].add(listingId);
         activeListings.add(listingId);
-        assignTokenToListings[_tokenContract][_tokenId].add(_listingId);
+        assignTokenToListings[_tokenContract][_tokenId]
+        .add(_listingId);
         emit ListingCreated(
             newListing.listingId, 
             newListing.tokenContract, 
@@ -167,7 +173,7 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
     }
 
     function getAllActiveListings(uint256 _startIndex, uint256 _count) 
-    public view returns (Listing[] memory, bool) {
+    external view returns (Listing[] memory, bool) {
     //This Function can "lazy load" a specific number of Active Listings, which can be called from the Frontend
         uint256 totalActive = activeListings.length();
         uint256 endIndex = _startIndex + _count;
@@ -214,11 +220,11 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
     }
 
     function getListingsForToken(address _tokenContract, uint256 _tokenId) 
-    public view returns (uint256[] memory) {
+    external view returns (uint256[] memory) {
         return assignTokenToListings[_tokenContract][_tokenId].values();
     }
 
-    function getSellerListings(address _seller) public view returns (uint256[] memory) {
+    function getSellerListings(address _seller) external view returns (uint256[] memory) {
         return sellerListings[_seller].values();
     }
 
@@ -231,7 +237,11 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
 
 //Purchase NFT Function
 // no state updating (mappings and arrays) so the last buyer of the Token does not get punished with high gas fees when the Listing should be deactivated
-    function buyNFT(uint256 _listingId, uint256 _quantity) external payable nonReentrant {
+    
+    function buyNFT(
+        uint256 _listingId, 
+        uint256 _quantity) 
+    external payable nonReentrant {
         Listing storage listing = listings[_listingId];
         require(listing.isActive, "Listing not active");
         require(_quantity <= listing.quantity, "Insufficient quantity available");

@@ -11,7 +11,6 @@ contract TokenContract is ERC1155, Ownable {
     event TokenMinted(uint256 indexed tokenId, address indexed receiver, uint256 amount, string tokenURI);
 
     string public name;
-
     uint256 private nextTokenId;
 
     struct TokenDetails {
@@ -22,9 +21,6 @@ contract TokenContract is ERC1155, Ownable {
     }
     //maps token ID to TokenDetails
     mapping(uint256 => TokenDetails) private tokenDetails;
-
-    // maps token ID to metadata URI
-    mapping(uint256 => string) private tokenURIs;
 
     constructor(string memory _name, string memory _baseURI, address _owner) 
     ERC1155(_baseURI) 

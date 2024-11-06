@@ -189,34 +189,34 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
         return (result, endIndex < totalActive);
     }
 
-    function getActiveListingsForContract(address _tokenContract, uint256 _startIndex, uint256 _count) 
-        external view returns (Listing[] memory, bool) {
-        Listing[] memory result = new Listing[](_count);
-        uint256 resultIndex = 0;
-        uint256 totalProcessed = 0;
-        // Iterate through all tokenIds for the given contract
-        mapping(uint256 => EnumerableSet.UintSet) storage contractListings = assignTokenToListings[_tokenContract];
-        for (uint256 tokenId = 0; resultIndex < _count && totalProcessed < _startIndex + _count; tokenId++) {
-            EnumerableSet.UintSet storage tokenListings = contractListings[tokenId];
-            uint256 listingCount = tokenListings.length();
-            for (uint256 i = 0; i < listingCount && resultIndex < _count; i++) {
-                if (totalProcessed >= _startIndex) {
-                    uint256 listingId = tokenListings.at(i);
-                    Listing storage listing = listings[listingId];
-                    if (listing.isActive) {
-                        result[resultIndex] = listing;
-                        resultIndex++;
-                    }
-                }
-                totalProcessed++;
-            }
-        }
-        // Resize the result array if we found fewer matching listings than requested
-        assembly {
-            mstore(result, resultIndex)
-        }
-        return (result, totalProcessed < _startIndex + _count);
-    }
+    // function getActiveListingsForContract(address _tokenContract, uint256 _startIndex, uint256 _count) 
+    //     external view returns (Listing[] memory, bool) {
+    //     Listing[] memory result = new Listing[](_count);
+    //     uint256 resultIndex = 0;
+    //     uint256 totalProcessed = 0;
+    //     // Iterate through all tokenIds for the given contract
+    //     mapping(uint256 => EnumerableSet.UintSet) storage contractListings = assignTokenToListings[_tokenContract];
+    //     for (uint256 tokenId = 0; resultIndex < _count && totalProcessed < _startIndex + _count; tokenId++) {
+    //         EnumerableSet.UintSet storage tokenListings = contractListings[tokenId];
+    //         uint256 listingCount = tokenListings.length();
+    //         for (uint256 i = 0; i < listingCount && resultIndex < _count; i++) {
+    //             if (totalProcessed >= _startIndex) {
+    //                 uint256 listingId = tokenListings.at(i);
+    //                 Listing storage listing = listings[listingId];
+    //                 if (listing.isActive) {
+    //                     result[resultIndex] = listing;
+    //                     resultIndex++;
+    //                 }
+    //             }
+    //             totalProcessed++;
+    //         }
+    //     }
+    //     // Resize the result array if we found fewer matching listings than requested
+    //     assembly {
+    //         mstore(result, resultIndex)
+    //     }
+    //     return (result, totalProcessed < _startIndex + _count);
+    // }
 
     function getListingsForToken(address _tokenContract, uint256 _tokenId) 
     external view returns (uint256[] memory) {
@@ -229,7 +229,7 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
 
     function getListingDetailsFromId(uint256 _listingId) 
     external view returns (Listing memory) {
-        require(_listingId < listingCounter, "Listing does not exist");
+        require(_listingId <= listingCounter, "Listing does not exist");
         return listings[_listingId];
     }
 
@@ -255,9 +255,9 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
             emit ListingDeactivated(_listingId);
         }
     // Perform transfers
-        bool success = payable(listing.seller).send(sellerPayment);
+        (bool success, ) = payable(listing.seller).call{value: sellerPayment}("");
         require(success, "Transfer to seller failed");
-        success = payable(owner()).send(fee);
+        (success, ) = payable(owner()).call{value: fee}("");
         require(success, "Transfer of fee failed");
         IERC1155(listing.tokenContract)
         .safeTransferFrom(address(this), msg.sender, listing.tokenId, _quantity, "");

@@ -81,7 +81,7 @@ contract TokenContract is ERC1155, Ownable {
     }
 
     function getTotalUniqueTokens() external view returns (uint256) {
-    return nextTokenId > 1 ? nextTokenId - 1 : 1;
+    return nextTokenId > 1 ? nextTokenId - 1 : nextTokenId;
     }   
 
     function getTokenDetails(uint256 _tokenId) external view returns (
@@ -133,10 +133,9 @@ contract TokenContract is ERC1155, Ownable {
         if (bytes(tokenURI).length > 0) {
             return tokenURI;
         }
-        return super.uri(_tokenId);
     }
 
-    function setName(string memory _newName) public onlyOwner {
+    function setName(string memory _newName) external onlyOwner {
         name = _newName;
     }
 }

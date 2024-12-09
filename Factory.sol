@@ -12,7 +12,7 @@ contract CustomERC1155Factory is Ownable {
 
     constructor(address initialOwner) Ownable(initialOwner) {}
 
-    function createTokenContract(string memory _baseURI, string memory _name) public 
+    function createTokenContract(string calldata _baseURI, string calldata _name) public 
     returns (address) {
         TokenContract newContract = new TokenContract(_name, _baseURI, msg.sender);
         createdContracts.push(address(newContract));
@@ -22,14 +22,14 @@ contract CustomERC1155Factory is Ownable {
     }
 
     function createTokenContractAndMint(
-        string memory _name,
-        string memory _baseURI,
+        string calldata _name,
+        string calldata _baseURI,
         address _receiver,
         uint256 _amount,
-        string memory _tokenURI,
+        string calldata _tokenURI,
         address _royaltyRecipient,
         uint256 _royaltyPercentage,
-        bytes memory _data
+        bytes calldata _data
     ) public returns (address, uint256) {
         TokenContract newContract = new TokenContract(_name, _baseURI, address(this));
         // Mint tokens

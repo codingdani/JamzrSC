@@ -22,7 +22,7 @@ contract TokenContract is ERC1155, Ownable {
     //maps token ID to TokenDetails
     mapping(uint256 => TokenDetails) private tokenDetails;
 
-    constructor(string memory _name, string memory _baseURI, address _owner) 
+    constructor(string calldata _name, string calldata _baseURI, address _owner) 
     ERC1155(_baseURI) 
     Ownable(_owner) {
         name = _name;
@@ -31,10 +31,10 @@ contract TokenContract is ERC1155, Ownable {
     function mint(
         address _receiver,
         uint256 _amount,
-        string memory _tokenURI,
+        string calldata _tokenURI,
         address _royaltyRecipient,
         uint256 _royaltyPercentage,
-        bytes memory _data
+        bytes calldata _data
     ) external onlyOwner returns (uint256) {
         require(_amount > 0, "Amount must be greater than 0");
         require(_royaltyPercentage <= 10000, "Royalty percentage cannot exceed 100%");
@@ -52,11 +52,11 @@ contract TokenContract is ERC1155, Ownable {
 
     function mintBatch(
         address _receiver,
-        uint256[] memory _amounts,
-        string[] memory _uris,
-        address[] memory _royaltyRecipients,
-        uint256[] memory _royaltyPercentages,
-        bytes memory _data
+        uint256[] calldata _amounts,
+        string[] calldata _uris,
+        address[] calldata _royaltyRecipients,
+        uint256[] calldata _royaltyPercentages,
+        bytes calldata _data
     ) external onlyOwner {
         require(_amounts.length == _uris.length && 
                 _amounts.length == _royaltyRecipients.length && 
@@ -123,7 +123,7 @@ contract TokenContract is ERC1155, Ownable {
         details.royaltyPercentage = _percentage;
     }
 
-    function setTokenURI(uint256 _tokenId, string memory _newURI) external onlyOwner {
+    function setTokenURI(uint256 _tokenId, string calldata _newURI) external onlyOwner {
         tokenDetails[_tokenId].uri = _newURI;
     }
 
@@ -135,7 +135,7 @@ contract TokenContract is ERC1155, Ownable {
         }
     }
 
-    function setName(string memory _newName) external onlyOwner {
+    function setName(string calldata _newName) external onlyOwner {
         name = _newName;
     }
 }

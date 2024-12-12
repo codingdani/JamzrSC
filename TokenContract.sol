@@ -86,10 +86,17 @@ contract TokenContract is ERC1155, Ownable {
 
     function getTokenDetails(uint256 _tokenId) external view returns (
         uint256 totalSupply, 
-        string memory tokenUri
+        string memory tokenUri,
+        address royaltyRecipient,
+        uint256 royaltyPercentage
         ) {
-    TokenDetails memory details = tokenDetails[_tokenId];
-    return (details.totalSupply, details.uri);
+        TokenDetails memory details = tokenDetails[_tokenId];
+        return (
+            details.totalSupply, 
+            details.uri, 
+            details.royaltyRecipient, 
+            details.royaltyPercentage
+            );
     }
 
     // function getAllTokensWithDetails() external view returns (

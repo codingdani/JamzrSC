@@ -80,10 +80,6 @@ contract TokenContract is ERC1155, Ownable {
         _mintBatch(_receiver, newIds, _amounts, _data);
     }
 
-    function getTotalUniqueTokens() external view returns (uint256) {
-    return nextTokenId > 1 ? nextTokenId - 1 : nextTokenId;
-    }   
-
     function getTokenDetails(uint256 _tokenId) external view returns (
         uint256 totalSupply, 
         string memory tokenUri,
@@ -133,15 +129,7 @@ contract TokenContract is ERC1155, Ownable {
     function setTokenURI(uint256 _tokenId, string calldata _newURI) external onlyOwner {
         tokenDetails[_tokenId].uri = _newURI;
     }
-
-    function uri(uint256 _tokenId) public view virtual override 
-    returns (string memory) {
-        string memory tokenURI = tokenDetails[_tokenId].uri;
-        if (bytes(tokenURI).length > 0) {
-            return tokenURI;
-        }
-    }
-
+    
     function setName(string calldata _newName) external onlyOwner {
         name = _newName;
     }

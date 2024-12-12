@@ -50,29 +50,8 @@ contract CustomERC1155Factory is Ownable {
         return (address(newContract), tokenId);
     }
 
-    function getContractCount() public view returns (uint256) {
-        return createdContracts.length;
-    }
-
-    function getContractAddress(uint256 _index) public view 
-    returns (address) {
-        require(_index < createdContracts.length, "Index out of bounds");
-        return createdContracts[_index];
-    }
-
-    function getCreatorContractCount(address _creator) public view 
-    returns (uint256) {
-        return creatorToContracts[_creator].length;
-    }
-
     function getAllContractsByCreator(address _creator) public view 
     returns (address[] memory) {
         return creatorToContracts[_creator];
-    }
-
-    function getCreatorContractAddress(address _creator, uint256 _index) public view 
-    returns (address) {
-        require(_index < creatorToContracts[_creator].length, "Index out of bounds");
-        return creatorToContracts[_creator][_index];
     }
 }

@@ -5,9 +5,27 @@ import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
+
+interface ITokenContract is IERC1155 {
+    struct TokenDetails {
+        uint256 totalSupply;
+        string uri;
+        address royaltyRecipient;
+        uint256 royaltyPercentage;
+    }
+    function getTokenDetails(uint256 _tokenId) 
+    external view returns (
+        uint256 totalSupply, 
+        string memory tokenUri,
+        address royaltyRecipient,
+        uint256 royaltyPercentage
+        );
+}
 
 contract NFTMarketplace is ReentrancyGuard, Ownable {
     using EnumerableSet for EnumerableSet.UintSet;
+
 //ZU BEACHTEN: 
 // Alle Käufer sollen gleiche Gas Fees zahlen (der letzte Käufer soll nicht alle state changes zahlen müssen)
 // Der Marketplace ist nur Operator. Die Token werden im Wallet der Besitzer gelassen 
@@ -34,18 +52,6 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
     mapping(address => mapping(uint256 => EnumerableSet.UintSet)) internal assignTokenToListings;
     //maps listingId to bool to indicate that Listing needs to be removed from all mappings and Sets
     mapping(uint256 => bool) public listingNeedsCleanup;
-
-    //Umstieg auf das Event "TokenSold", um Gaskosten zu reduzieren
-    // struct Transaction {
-    //     uint256 listingId;
-    //     address buyer;
-    //     uint256 price;
-    //     uint256 mfee;
-    //     uint256 quantity;
-    //     uint256 timestamp;
-    // }
-    // //maps listingId to Array of Transactions
-    // mapping(uint256 => Transaction[]) public listingTransactions;
 
     mapping(address => bool) public supportedTokenContracts;
     uint256 public marketplaceFeePercentage;
@@ -240,42 +246,57 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
     function buyNFT(
         uint256 _listingId, 
         uint256 _quantity) 
-    external payable nonReentrant {
+        external payable nonReentrant {
         Listing storage listing = listings[_listingId];
         require(listing.isActive, "Listing not active");
         require(_quantity <= listing.quantity, "Insufficient quantity available");
         uint256 totalPrice = listing.price * _quantity;
         require(msg.value >= totalPrice, "Insufficient payment");
-        uint256 fee = (totalPrice * marketplaceFeePercentage) / 10000;
-        uint256 sellerPayment = totalPrice - fee;
-    //update quantity
+        
+        // Get royalty information from the ERC1155 contract
+        ITokenContract tokenContract = ITokenContract(listing.tokenContract);
+        ITokenContract.TokenDetails memory tokenDetails = tokenContract.getTokenDetails(listing.tokenId);
+
+        // calc payments
+        uint256 royaltyAmount = (totalPrice * tokenDetails.royaltyPercentage) / 10000; 
+        uint256 fee = (totalPrice * marketplaceFeePercentage) / 10000; 
+        uint256 sellerPayment = totalPrice - fee - royaltyAmount; 
+        
+        // Update quantity of listing
         listing.quantity -= _quantity;
         if (listing.quantity == 0) {
             _deactivateListing(listing, _listingId);
             emit ListingDeactivated(_listingId);
         }
-    // Perform transfers
+        
+        // Perform transfers
+        if (tokenDetails.royaltyRecipient != listing.seller && royaltyAmount > 0) {
+            (bool success, ) = payable(tokenDetails.royaltyRecipient).call{value: royaltyAmount}("");
+            require(success, "Transfer of royalties failed");
+        } else {
+            sellerPayment += royaltyAmount;
+        }
         (bool success, ) = payable(listing.seller).call{value: sellerPayment}("");
         require(success, "Transfer to seller failed");
         (success, ) = payable(owner()).call{value: fee}("");
         require(success, "Transfer of fee failed");
-        IERC1155(listing.tokenContract)
-        .safeTransferFrom(address(this), msg.sender, listing.tokenId, _quantity, "");
-    // record transaction & emit TokenSold event
-    emit TokenSold(
-        _listingId,
-        listing.tokenContract,
-        listing.seller,
-        msg.sender,
-        listing.tokenId,
-        _quantity,
-        totalPrice,
-        fee,
-        block.timestamp
-    );
-    emit ListingUpdated(_listingId, listing.quantity);
+        tokenContract.safeTransferFrom(address(this), msg.sender, listing.tokenId, _quantity, "");
+        
+        // Emit events
+        emit TokenSold(
+            _listingId,
+            listing.tokenContract,
+            listing.seller,
+            msg.sender,
+            listing.tokenId,
+            _quantity,
+            totalPrice,
+            fee,
+            royaltyAmount,
+            block.timestamp
+        );
+        emit ListingUpdated(_listingId, listing.quantity);
     }
-
 
 //Marketplace Functions
     function setMarketplaceFee(uint256 _newFeePercentage) external onlyOwner {
@@ -293,4 +314,3 @@ contract NFTMarketplace is ReentrancyGuard, Ownable {
         supportedTokenContracts[_tokenContract] = false;
     }
 }
-
